@@ -11,7 +11,7 @@ It's so easy, even a nerd could use it.
 ## Features
 
 - Easily manage your Nerd Fonts with one-liners like
-  - `nerdforge install <Font Name>`
+  - `nerdforge install <FontName>`
 - Downloads the font's `.tar.xz` or falls back to `.zip` automatically
 - Delete installed Nerd fonts
 - Check if a Nerd Font is installed
