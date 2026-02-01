@@ -2,6 +2,8 @@
 
 A tool for nerds to manage their Nerd Fonts
 
+![Nerd Forge Logo](/assets/images/nerdforge.png)
+
 **Nerd Forge** is a command-line tool to install, delete, check, and manage Nerd Fonts on Linux. It supports both `.tar.xz` and `.zip` releases from [the official Nerd Fonts GitHub repository](https://github.com/ryanoasis/nerd-fonts) and automatically rebuilds your font cache after operations.
 
 It's so easy, even a nerd could use it.
