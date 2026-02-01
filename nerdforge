@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+trap 'echo "nerdforge failed." >&2' ERR
+
+# -----------------------
+# Script version
+# -----------------------
+NERDFORGE_VERSION="v0.1.0"
+
+# -----------------------
+# Directories & URLs
+# -----------------------
+FONT_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/fonts"
+BASE_URL="https://github.com/ryanoasis/nerd-fonts/releases/latest/download"
+
+# -----------------------
+# Helper functions
+# -----------------------
+has_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+find_existing_fonts() {
+  local font_name="$1"
+  compgen -G "$FONT_DIR/*${font_name}*NerdFont*.ttf"
+}
+
+ensure_font_dir() {
+  mkdir -p "$FONT_DIR"
+}
+
+error_exit() {
+  echo "Error: $1" >&2
+  exit 1
+}
+
+usage() {
+  cat <<EOF
+Usage:  nerdforge [option]
+        nerdforge <command> [args]
+
+Commands:
+  install <FontName>            Install a Nerd Font
+  delete <FontName>             Delete a Nerd Font
+  check <FontName>              Check if a Nerd Font is installed
+  list                          List installed Nerd Fonts
+  doctor                        Check system dependencies
+  version                       Show nerdforge version
+  help                          Show this help message
+
+  You can also use -h/--help for help, -v/--version for version
+
+Examples:
+  nerdforge install JetBrainsMono
+  nerdforge delete Hack
+  nerdforge check FiraCode
+  nerdforge list
+
+EOF
+
+  exit 1
+}
+
+# -----------------------
+# Subcommands
+# -----------------------
+cmd_install() {
+  local FONT_NAME="$1"
+  local TAR_FILE="${FONT_NAME}.tar.xz"
+  local ZIP_FILE="${FONT_NAME}.zip"
+  local USED_FORMAT=""
+  local DOWNLOAD_CMD=""
+
+  if EXISTING=$(find_existing_fonts "$FONT_NAME"); [[ -n "$EXISTING" ]]; then
+    echo "$FONT_NAME already installed. Skipping."
+    return
+  fi
+
+  ensure_font_dir
+  cd "$FONT_DIR"
+
+  # Determine download command
+  if has_cmd curl; then
+    DOWNLOAD_CMD="curl -fL -o"
+  elif has_cmd wget; then
+    DOWNLOAD_CMD="wget -O"
+  else
+    error_exit "Cannot install font: neither 'curl' nor 'wget' is installed."
+  fi
+
+  # Try tar.xz first
+  if has_cmd tar; then
+    echo "Trying $TAR_FILE..."
+    if $DOWNLOAD_CMD "$TAR_FILE" "$BASE_URL/$TAR_FILE"; then
+      USED_FORMAT="tar"
+    else
+      rm -f "$TAR_FILE"
+    fi
+  fi
+
+  # Fallback zip
+  if [[ -z "$USED_FORMAT" ]] && has_cmd unzip; then
+    echo "Trying $ZIP_FILE..."
+    if $DOWNLOAD_CMD "$ZIP_FILE" "$BASE_URL/$ZIP_FILE"; then
+      USED_FORMAT="zip"
+    else
+      rm -f "$ZIP_FILE"
+    fi
+  fi
+
+  [[ -z "$USED_FORMAT" ]] && error_exit "Cannot install font: missing tar/unzip or font archive not found."
+
+  echo "Extracting using $USED_FORMAT..."
+  case "$USED_FORMAT" in
+    tar) tar -xf "$TAR_FILE"; rm -f "$TAR_FILE" ;;
+    zip) unzip -o "$ZIP_FILE"; rm -f "$ZIP_FILE" ;;
+  esac
+
+  echo "Updating font cache..."
+  fc-cache -fv
+  echo "$FONT_NAME installed."
+}
+
+
+cmd_delete() {
+  local FONT_NAME="$1"
+  if EXISTING=$(find_existing_fonts "$FONT_NAME" || true); [[ -z "$EXISTING" ]]; then
+    echo "No fonts found for $FONT_NAME."
+    return
+  fi
+  echo "Deleting fonts for $FONT_NAME:"
+  echo "$EXISTING"
+  rm -f $EXISTING
+  fc-cache -fv
+  echo "$FONT_NAME deleted."
+}
+
+cmd_check() {
+  local FONT_NAME="$1"
+  if EXISTING=$(find_existing_fonts "$FONT_NAME"); [[ -n "$EXISTING" ]]; then
+    echo "Installed fonts for $FONT_NAME:"
+    echo "$EXISTING"
+  else
+    echo "No installed fonts found for $FONT_NAME."
+  fi
+}
+
+cmd_list() {
+  echo "Installed Nerd Fonts in $FONT_DIR:"
+  compgen -G "$FONT_DIR/*NerdFont*.ttf" || echo "  (none found)"
+}
+
+cmd_doctor() {
+  echo "Checking system dependencies..."
+
+  # Check download tools
+  if has_cmd curl || has_cmd wget; then
+    echo "  Download tool: OK (curl or wget found)"
+  else
+    echo "  Download tool: MISSING (need curl or wget)"
+  fi
+
+  # Check extraction tools
+  if has_cmd tar || has_cmd unzip; then
+    echo "  Extraction tool: OK (tar or unzip found)"
+  else
+    echo "  Extraction tool: MISSING (need tar or unzip)"
+  fi
+
+  # Check fc-cache
+  if has_cmd fc-cache; then
+    echo "  fc-cache: OK"
+  else
+    echo "  fc-cache: MISSING (needed to update font cache)"
+  fi
+}
+
+
+cmd_version() {
+  echo "nerdforge $NERDFORGE_VERSION"
+}
+
+# -----------------------
+# Main dispatcher
+# -----------------------
+if [[ $# -lt 1 ]]; then
+  usage
+fi
+
+COMMAND="$1"; shift
+
+case "$COMMAND" in
+  install) [[ $# -eq 1 ]] || usage; cmd_install "$1" ;;
+  delete)  [[ $# -eq 1 ]] || usage; cmd_delete "$1" ;;
+  check)   [[ $# -eq 1 ]] || usage; cmd_check "$1" ;;
+  list)    [[ $# -eq 0 ]] || usage; cmd_list ;;
+  doctor)  [[ $# -eq 0 ]] || usage; cmd_doctor ;;
+  version) [[ $# -eq 0 ]] || usage; cmd_version ;;
+  help)    [[ $# -eq 0 ]] || usage; usage ;;
+  -h|--help) usage ;;
+  -v|--version) cmd_version ;;
+  *) usage ;;
+esac
+
